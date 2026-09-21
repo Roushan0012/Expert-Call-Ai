@@ -107,6 +107,8 @@ class VectorStore:
         query: str,
         k: int = 5,
         filter_expert_only: bool = False,
+        filter_country: Optional[str] = None,
+        filter_transcript_id: Optional[str] = None,
         min_score: Optional[float] = None,
     ) -> List[RetrievalResult]:
         """Retrieve the top-k most relevant evidence segments for a query.
@@ -115,6 +117,8 @@ class VectorStore:
             query: Natural language search query.
             k: Maximum number of results to return.
             filter_expert_only: If True, only return segments spoken by the expert.
+            filter_country: Optional country filter (e.g., 'France', 'Germany', 'UK').
+            filter_transcript_id: Optional transcript ID filter (e.g., 'france_1').
             min_score: Optional minimum cosine similarity threshold.
 
         Returns:
@@ -124,9 +128,9 @@ class VectorStore:
         if not query_clean or self.total_records == 0 or k <= 0:
             return []
 
-        # If filtering is requested, we fetch more candidate vectors to ensure k results after filter
-        fetch_k = min(self.total_records, max(k * 3, 20) if filter_expert_only else k)
-        fetch_k = min(self.total_records, fetch_k)
+        # If filtering is requested, scan all available vectors to guarantee top-k for that filter
+        has_filter = filter_expert_only or filter_country or filter_transcript_id
+        fetch_k = self.total_records if has_filter else min(self.total_records, k)
 
         query_vec = embed_query(query_clean, model_name=self.model_name, normalize=True)
         scores, indices = self.index.search(query_vec, fetch_k)
@@ -141,6 +145,12 @@ class VectorStore:
             segment = self.segments[idx]
 
             if filter_expert_only and not segment.is_expert:
+                continue
+
+            if filter_country and segment.country != filter_country:
+                continue
+
+            if filter_transcript_id and segment.transcript_id != filter_transcript_id:
                 continue
 
             if min_score is not None and score < min_score:
@@ -159,6 +169,80 @@ class VectorStore:
                 break
 
         return results
+
+    def search_by_expert(
+        self,
+        query: str,
+        expert_or_country: str,
+        k: int = 3,
+        filter_expert_only: bool = False,
+    ) -> List[RetrievalResult]:
+        """Retrieve evidence segments specifically for one expert or country.
+
+        Args:
+            query: Natural language question.
+            expert_or_country: Target expert name, country, or transcript_id.
+            k: Number of segments to return.
+            filter_expert_only: If True, restricts to expert-spoken segments.
+
+        Returns:
+            Filtered list of RetrievalResult objects.
+        """
+        target = expert_or_country.strip()
+        results: List[RetrievalResult] = []
+
+        # Search matching transcript_id, country, or expert
+        all_matches = self.search(
+            query=query,
+            k=self.total_records,
+            filter_expert_only=filter_expert_only,
+        )
+
+        for res in all_matches:
+            seg = res.segment
+            if (
+                seg.country == target
+                or seg.transcript_id == target
+                or seg.expert.lower() == target.lower()
+                or target.lower() in seg.expert.lower()
+            ):
+                results.append(res)
+                if len(results) >= k:
+                    break
+
+        # Re-index ranks for the returned subset
+        for idx, r in enumerate(results, start=1):
+            r.rank = idx
+
+        return results
+
+    def search_per_expert(
+        self,
+        query: str,
+        k_per_expert: int = 2,
+        filter_expert_only: bool = False,
+    ) -> Dict[str, List[RetrievalResult]]:
+        """Retrieve top-k evidence segments for each of the three market experts.
+
+        Guarantees balanced representation across France, Germany, and the UK.
+
+        Args:
+            query: Natural language query.
+            k_per_expert: Number of segments per expert.
+            filter_expert_only: If True, only returns expert-spoken segments.
+
+        Returns:
+            Dictionary mapping country ('France', 'Germany', 'United Kingdom') to list of RetrievalResult.
+        """
+        per_expert: Dict[str, List[RetrievalResult]] = {}
+        for country in ["France", "Germany", "United Kingdom"]:
+            per_expert[country] = self.search_by_expert(
+                query=query,
+                expert_or_country=country,
+                k=k_per_expert,
+                filter_expert_only=filter_expert_only,
+            )
+        return per_expert
 
     def save(self, directory: Union[str, Path]) -> None:
         """Persist FAISS index binary and metadata mapping to a local directory.

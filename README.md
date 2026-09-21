@@ -134,6 +134,38 @@ The Groq model is strictly governed by systemic guardrails:
 
 ---
 
+## 📊 Interview Guide Workflow & Cross-Expert Analysis (Step 5)
+
+### 1. The 6 Interview Guide Questions
+The workflow standardizes analysis across all 3 case study transcripts (`src/interview_guide.py`):
+1. **Clinical Unmet Need:** What are the primary unmet clinical needs in surgical treatment and patient management?
+2. **Current Standard of Care:** What is the current standard of care and how do existing surgical tools perform?
+3. **Purchasing & Decision Timeline:** What is the hospital procurement and decision-making timeline for acquiring new medical equipment?
+4. **Key Stakeholders & Decision Makers:** Who are the primary stakeholders and decision-makers involved in purchasing evaluations?
+5. **Budget & Reimbursement:** What budget, pricing, or reimbursement constraints influence adoption in this market?
+6. **Adoption Barriers & Catalysts:** What are the primary barriers to adoption and what catalysts drive clinical acceptance?
+
+### 2. Expert Isolation & Market Attribution
+- **Single-Expert Answers:** When querying an expert's perspective (`answer_expert_question()`), retrieval is strictly partitioned using `vector_store.search_by_expert(query, expert=..., k=...)`.
+- **Zero Cross-Contamination:** Questions regarding France (Dr. Jean Martin) retrieve exclusively from `france_1`; Germany (Anna Keller) retrieves exclusively from `germany_2`; UK (Dr. Emily Carter) retrieves exclusively from `uk_3`.
+- **Market Specifics:** Ensures market-specific nuances (e.g., German hospital procurement boards vs French clinical department heads vs UK NHS trusts) are never conflated.
+
+### 3. Balanced Cross-Expert Retrieval
+- **Problem Solved:** Global semantic vector search can allow one verbose transcript or high-keyword section to crowd out other markets.
+- **Solution (`search_per_expert`):** Guarantees that retrieval allocates $k$ evidence segments per expert (total $3 \times k$ segments). All 3 countries (France, Germany, UK) contribute equal representation into the synthesis context.
+- **Purchasing Timeline Grounding:** Resolves edge cases such as Germany's purchasing timeline (`06:05` Anna Keller: *"Nine to eighteen months is common..."*), which does not contain the literal word "timeline" in its answer. Context pairing and targeted query expansions guarantee this segment is retrieved at rank 1 alongside France (`06:08`: 6–12 months) and the UK (`05:04`: 6–9 months).
+
+### 4. Cross-Expert Synthesis
+`compare_experts()` runs grounded comparative analysis:
+- **Common Themes:** Grounded synthesis of consensus across all 3 experts (e.g., shared need for ergonomic precision, shared concern over long hospital tender cycles).
+- **Contrasting Viewpoints & Disagreements:** Clear, attributed distinctions between clinical department heads (France), procurement/budget directors (Germany), and consultant urologists (UK).
+- **Strict Grounding:** The model is forbidden from inventing consensus or projecting viewpoints onto experts who did not express them.
+
+### 5. Verbatim Quote Safety
+All quotations, timestamps, and metadata attached to `InterviewQuestionResult` and `CrossExpertAnalysis` are mapped directly from immutable `EvidenceSegment` records. The LLM is never relied upon to generate or hallucinate quotes.
+
+---
+
 ## 📁 Project Structure
 
 ```text
@@ -151,14 +183,17 @@ expert-call-ai/
 │   └── vector_store/           # Local FAISS index & metadata (git-ignored)
 ├── src/                        # Core application logic and modules
 │   ├── __init__.py
+│   ├── analysis.py             # Interview guide workflow & cross-expert comparison
 │   ├── embeddings.py           # Local Sentence-Transformers embedding wrapper
+│   ├── interview_guide.py      # Standard 6 interview guide questions & topics
 │   ├── llm.py                  # Groq client wrapper and completion interface
 │   ├── models.py               # EvidenceSegment & Transcript data models
 │   ├── parser.py               # Deterministic transcript parser & CLI inspection
 │   ├── rag.py                  # Grounded RAG answer generation & manual CLI demo
-│   └── vector_store.py         # FAISS vector index, persistence, and retrieval CLI
+│   └── vector_store.py         # FAISS vector index, expert-filtered retrieval, persistence
 └── tests/                      # Automated test suite
     ├── __init__.py
+    ├── test_analysis.py        # Pytest suite for interview workflow & comparison (14 tests)
     ├── test_parser.py          # Pytest suite for transcript parser (14 tests)
     ├── test_rag.py             # Pytest suite for Groq grounded RAG (12 tests)
     └── test_retrieval.py       # Pytest suite for FAISS retrieval (12 tests)
@@ -216,12 +251,19 @@ To test grounded question answering against the real Groq API:
 python -m src.rag
 ```
 
-### 8. Run Automated Tests
+### 8. Run Interview Guide & Cross-Expert Analysis (CLI)
+To run end-to-end analysis on Interview Guide Question 3 (Purchasing Timelines) across France, Germany, and the UK with Groq synthesis:
+```bash
+python -m src.analysis
+```
+
+### 9. Run Automated Tests
+Run the comprehensive 52-test offline verification suite:
 ```bash
 pytest -v
 ```
 
-### 9. Run the Streamlit Application
+### 10. Run the Streamlit Application
 ```bash
 streamlit run app.py
 ```
