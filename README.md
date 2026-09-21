@@ -273,13 +273,48 @@ The evaluation suite executes across 15 standardized golden test cases spanning 
 
 ---
 
+## 🎯 Case Study Requirement Traceability Matrix
+
+Every requirement from the official case study is explicitly satisfied, tested, and verifiable:
+
+| Case Study Requirement | Architecture Implementation | Verification / Test Evidence | Status |
+| :--- | :--- | :--- | :--- |
+| **1. Upload/read 3 transcripts** | `src/parser.py` deterministically parses France, Germany, and UK transcripts into 42 immutable `EvidenceSegment` units | `tests/test_parser.py` (14 tests passing); CLI `python -m src.parser` | **COMPLETE** |
+| **2. Answer interview-guide questions for each expert** | `src/interview_guide.py` defines the 6 official questions; `src/analysis.py` answers each per expert with isolated retrieval | `tests/test_analysis.py` (15 tests passing); `GOLDEN-01`, `GOLDEN-02` | **COMPLETE** |
+| **3. Extract useful exact quotes** | `src/models.py` preserves verbatim dialogue; `src/ui/common.py` renders quotes strictly from `EvidenceSegment.text` | `tests/test_rag.py::test_source_text_identical_to_original_segment`; `GOLDEN-01` to `07` | **COMPLETE** |
+| **4. Show source timestamp for each answer/quote** | `EvidenceSegment.timestamp` preserved during parsing and displayed on every answer citation card | `tests/test_parser.py::test_timestamps_extracted`; `GOLDEN-04` (`06:05`) | **COMPLETE** |
+| **5. Identify common themes and disagreements** | `compare_experts()` in `src/analysis.py` synthesizes consensus themes and market-attributed differences | `tests/test_analysis.py::test_cross_expert_analysis_includes_all_experts`; `GOLDEN-03`, `05`, `06`, `07` | **COMPLETE** |
+| **6. Allow questions across all transcripts** | `answer_question()` in `src/rag.py` and *Ask Across Calls* UI page enable arbitrary cross-call natural language queries | `tests/test_rag.py` (12 tests passing); `app.py` Ask page | **COMPLETE** |
+
+---
+
+## 📈 Scaling Strategy: 3 → 30+ Transcripts
+
+| Dimension | Current Implementation (3 Calls) | Production Scaling Architecture (30+ Calls) |
+| :--- | :--- | :--- |
+| **Vector Storage** | Local FAISS `IndexFlatIP` file (`index.faiss`) | Managed distributed vector database (Qdrant, Milvus, pgvector) |
+| **Indexing** | In-memory exact inner-product search | HNSW / IVFFlat indexing with metadata payload filtering |
+| **Ingestion** | Synchronous local script execution | Async distributed task queue (Celery, Kafka, AWS SQS) |
+| **Embedding Generation** | On-demand single CPU encoding | Batched GPU encoding with micro-batch queuing |
+| **Retrieval Strategy** | Dense cosine similarity | Hybrid search (Dense vector + Sparse BM25) + Cross-Encoder Reranking |
+| **Partitioning** | Python-level expert filtering | Native database multi-tenancy (partitioned by Project, Market, Date) |
+| **Metadata Tracking** | Direct 1:1 positional array in JSON | Relational database (PostgreSQL) with ACID transaction logs |
+| **Caching** | Streamlit `@st.cache_resource` in RAM | Distributed semantic cache (Redis) for repeated question embeddings |
+| **Access Control** | Single-user local workspace | Enterprise RBAC with project-level read/write permissions |
+| **Observability** | Standard Python `logging` | Distributed tracing (OpenTelemetry, LangSmith, TruLens) |
+| **Evaluation** | 15 golden cases + 77 unit tests | Automated CI/CD evaluation pipeline with dynamic golden datasets |
+
+*For deep architectural details, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).*
+
+---
+
 ## 📁 Project Structure
 
 ```text
 expert-call-ai/
 ├── app.py                      # Streamlit entrypoint and sidebar router
 ├── requirements.txt            # Project dependencies (Streamlit, FAISS, Groq, Sentence-Transformers)
-├── README.md                   # Documentation & case study details
+├── README.md                   # Comprehensive documentation & case study details
 ├── .gitignore                  # Git ignore rules (ignores .env, data/vector_store/)
 ├── .env.example                # Environment variable template (GROQ_API_KEY)
 ├── data/                       # Case study transcript files
@@ -288,6 +323,9 @@ expert-call-ai/
 │   ├── Transcript_2_Germany.txt
 │   ├── Transcript_3_UK.txt
 │   └── vector_store/           # Local FAISS index & metadata (git-ignored)
+├── docs/                       # Technical specifications & interview documentation
+│   ├── ARCHITECTURE.md         # Deep-dive system architecture, model choices & grounding
+│   └── DEMO_GUIDE.md           # 5–7 min live demo script & technical interview talking points
 ├── scripts/                    # Command-line utility and verification runners
 │   └── evaluate.py             # Grounding and evaluation benchmark CLI runner
 ├── src/                        # Core application logic and modules
@@ -404,3 +442,11 @@ Open your browser at `http://localhost:8501` to view the application:
 - **Cross-Expert Analysis:** Compare market perspectives, consensus themes, and divergences.
 - **Ask Across Calls:** Interactively query transcripts with grounded RAG.
 - **Transcript Explorer:** Inspect immutable raw timestamped dialogue turns directly.
+
+---
+
+## 🎬 Interview Demonstration & Talking Points
+
+For a timed 5–7 minute live interview presentation flow and technical Q&A cheat sheet, refer to:
+- **[docs/DEMO_GUIDE.md](docs/DEMO_GUIDE.md)**: Timed demo walkthrough from problem intro to scaling.
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**: Comprehensive architectural breakdown, model choice rationales, and grounding guarantees.
