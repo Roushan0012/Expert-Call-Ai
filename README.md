@@ -166,11 +166,57 @@ All quotations, timestamps, and metadata attached to `InterviewQuestionResult` a
 
 ---
 
+## 🖥️ Streamlit UI & Dashboard Integration (Step 6)
+
+### 1. Application Architecture & Pages
+The user interface is built as a responsive, interviewer-friendly Streamlit dashboard structured into 5 dedicated sections:
+
+1. **📊 Overview:**
+   - Real-time project statistics derived dynamically from the backend (Transcripts: 3, Experts: 3, Evidence Segments: 42, Model: `all-MiniLM-L6-v2`, Vector Index: `FAISS IndexFlatIP`, LLM: `Groq qwen/qwen3.8-27b`).
+   - Commercial market cards detailing the 3 participating experts: France (Dr. Jean Martin), Germany (Anna Keller), and UK (Dr. Emily Carter).
+   - Architectural flow diagram outlining deterministic ingestion, dense retrieval, Groq synthesis, and citation verification.
+
+2. **📋 Interview Guide:**
+   - Complete support for the 6 official case-study questions.
+   - Flexible controls: select an individual market expert (France, Germany, UK) for strict expert isolation, or "All Experts" to render 3 side-by-side comparative cards with clear attribution.
+   - Batch analysis mode to evaluate all 6 questions sequentially.
+   - Prominent source citation containers for each generated answer.
+
+3. **⚖️ Cross-Expert Analysis:**
+   - Structured comparative synthesis across France, Germany, and the UK.
+   - Preset comparative topics (budgets, barriers, purchasing timelines, training, 3–5 year adoption) or custom natural language queries.
+   - Distinct sections for **Common Themes & Consensus**, **Market Divergences & Differences**, **Synthesis Narrative**, and **Attributed Market Cards**.
+
+4. **💬 Ask Across Calls:**
+   - Natural language conversational search and synthesis across all 3 transcripts using grounded RAG.
+   - Preset suggested inquiries and interactive custom question input.
+   - Session history log preserving queries, answers, and underlying citations across the user session.
+
+5. **📖 Transcript Explorer:**
+   - Read-only, immutable viewer for original transcript files.
+   - Market selector (France, Germany, UK) with metadata banners.
+   - Speaker filter (All Dialogue, Expert Statements Only, Interviewer Questions Only) and instant text keyword search.
+   - Chronological dialogue display with `MM:SS` timestamps and speaker tags.
+
+### 2. Source Traceability & Citation UX
+Every generated answer features a dedicated **Verified Source Citations** expander displaying:
+- Exact `MM:SS` timestamp
+- Expert name, professional role, and market flag
+- Speaker label and role badge
+- Verbatim transcript text enclosed in quotation blocks directly from `EvidenceSegment.text`
+
+### 3. Caching & Performance
+- `@st.cache_resource`: Persists the FAISS vector store and Sentence-Transformers embedding model in memory, eliminating redundant index reloads across page navigation.
+- `@st.cache_data`: Caches parsed transcript objects and metadata.
+- Groq completions are only invoked on explicit user button triggers, preventing unnecessary API calls.
+
+---
+
 ## 📁 Project Structure
 
 ```text
 expert-call-ai/
-├── app.py                      # Streamlit entrypoint
+├── app.py                      # Streamlit entrypoint and sidebar router
 ├── requirements.txt            # Project dependencies (Streamlit, FAISS, Groq, Sentence-Transformers)
 ├── README.md                   # Documentation & case study details
 ├── .gitignore                  # Git ignore rules (ignores .env, data/vector_store/)
@@ -185,15 +231,24 @@ expert-call-ai/
 │   ├── __init__.py
 │   ├── analysis.py             # Interview guide workflow & cross-expert comparison
 │   ├── embeddings.py           # Local Sentence-Transformers embedding wrapper
-│   ├── interview_guide.py      # Standard 6 interview guide questions & topics
+│   ├── interview_guide.py      # Official 6 interview guide questions & topics
 │   ├── llm.py                  # Groq client wrapper and completion interface
 │   ├── models.py               # EvidenceSegment & Transcript data models
 │   ├── parser.py               # Deterministic transcript parser & CLI inspection
 │   ├── rag.py                  # Grounded RAG answer generation & manual CLI demo
-│   └── vector_store.py         # FAISS vector index, expert-filtered retrieval, persistence
-└── tests/                      # Automated test suite
+│   ├── vector_store.py         # FAISS vector index, expert-filtered retrieval, persistence
+│   └── ui/                     # Modular Streamlit UI presentation layer
+│       ├── __init__.py
+│       ├── ask.py              # Ask Across Calls conversational interface
+│       ├── common.py           # Shared UI utilities, caching, and source cards
+│       ├── cross_expert.py     # Cross-Expert Analysis and comparative synthesis
+│       ├── explorer.py         # Transcript Explorer with speaker filters
+│       ├── interview.py        # Interview Guide 6-question workflow
+│       └── overview.py         # Dashboard metrics and expert profile cards
+└── tests/                      # Automated test suite (65 tests)
     ├── __init__.py
-    ├── test_analysis.py        # Pytest suite for interview workflow & comparison (14 tests)
+    ├── test_analysis.py        # Pytest suite for interview workflow & comparison (15 tests)
+    ├── test_app.py             # Pytest suite for Streamlit UI & integration (12 tests)
     ├── test_parser.py          # Pytest suite for transcript parser (14 tests)
     ├── test_rag.py             # Pytest suite for Groq grounded RAG (12 tests)
     └── test_retrieval.py       # Pytest suite for FAISS retrieval (12 tests)
@@ -258,13 +313,19 @@ python -m src.analysis
 ```
 
 ### 9. Run Automated Tests
-Run the comprehensive 52-test offline verification suite:
+Run the comprehensive 65-test offline verification suite:
 ```bash
 pytest -v
 ```
 
 ### 10. Run the Streamlit Application
+Launch the interactive web dashboard:
 ```bash
 streamlit run app.py
 ```
-Open your browser at `http://localhost:8501` to view the application.
+Open your browser at `http://localhost:8501` to view the application:
+- **Overview:** Explore project statistics and participating market experts.
+- **Interview Guide:** Select questions 1–6 and explore single-expert or all-expert responses with verified citations.
+- **Cross-Expert Analysis:** Compare market perspectives, consensus themes, and divergences.
+- **Ask Across Calls:** Interactively query transcripts with grounded RAG.
+- **Transcript Explorer:** Inspect immutable raw timestamped dialogue turns directly.
