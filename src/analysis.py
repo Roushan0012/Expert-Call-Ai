@@ -225,7 +225,24 @@ def _resolve_expert_evidence(
     """Retrieve and pair question-answer turns specifically for one expert."""
     # Find queries to execute (original query plus any targeted expansions)
     queries_to_run = [query]
-    matched_expansions = QUESTION_SEARCH_EXPANSIONS.get(query, [])
+    matched_expansions = list(QUESTION_SEARCH_EXPANSIONS.get(query, []))
+
+    # Also match topic expansions if keywords are present in query
+    q_lower = query.lower()
+    if not matched_expansions:
+        if any(w in q_lower for w in ["timeline", "how long", "purchase process", "decision-making timeline", "decision timeline"]):
+            matched_expansions.extend(QUESTION_SEARCH_EXPANSIONS.get(INTERVIEW_GUIDE_QUESTIONS[5], []))
+        elif any(w in q_lower for w in ["barrier", "holding adoption back", "hurdle"]):
+            matched_expansions.extend(QUESTION_SEARCH_EXPANSIONS.get(INTERVIEW_GUIDE_QUESTIONS[1], []))
+        elif any(w in q_lower for w in ["budget", "roi", "return on investment", "finance"]):
+            matched_expansions.extend(QUESTION_SEARCH_EXPANSIONS.get(INTERVIEW_GUIDE_QUESTIONS[2], []))
+        elif any(w in q_lower for w in ["training", "clinical outcomes", "surgeon training"]):
+            matched_expansions.extend(QUESTION_SEARCH_EXPANSIONS.get(INTERVIEW_GUIDE_QUESTIONS[3], []))
+        elif any(w in q_lower for w in ["trend", "3–5", "3-5", "outlook", "accelerate"]):
+            matched_expansions.extend(QUESTION_SEARCH_EXPANSIONS.get(INTERVIEW_GUIDE_QUESTIONS[4], []))
+        elif any(w in q_lower for w in ["adoption", "market today"]):
+            matched_expansions.extend(QUESTION_SEARCH_EXPANSIONS.get(INTERVIEW_GUIDE_QUESTIONS[0], []))
+
     queries_to_run.extend(matched_expansions)
 
     raw_candidates: List[RetrievalResult] = []

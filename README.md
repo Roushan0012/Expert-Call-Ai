@@ -212,6 +212,67 @@ Every generated answer features a dedicated **Verified Source Citations** expand
 
 ---
 
+## 🧪 End-to-End Evaluation & Grounding Validation (Step 7)
+
+To satisfy the core case-study imperative that **"Every important answer must be traceable to the transcripts and the system must not invent information"**, ExpertCall AI provides a rigorous automated evaluation and grounding verification suite (`src/evaluation.py` and `scripts/evaluate.py`).
+
+### 1. The Seven Grounding Pillars
+
+1. **Source Attribution (100% Verbatim Match):**
+   - Every citation attached to an answer is verified character-by-character against the authentic raw transcript segment (`EvidenceSegment.text`).
+   - Tampered text, altered phrasing, or fabricated IDs fail validation immediately.
+
+2. **Timestamp Preservation:**
+   - Source citations must reflect exact chronological dialogue milestones directly from the raw transcript.
+   - Ground truth timestamps (France `01:20`, `02:18`, `06:08`; Germany `02:08`, `06:05`; UK `02:07`, `05:04`) are strictly matched.
+
+3. **Quote Safety & Hallucination Prevention:**
+   - Citations and quotation cards rendered in the UI originate strictly from immutable `EvidenceSegment.text` objects in memory.
+   - The LLM is structurally prohibited from producing its own quotes or having its generated output treated as transcript citations.
+
+4. **Expert Isolation (Zero Cross-Market Leakage):**
+   - Single-expert queries (e.g., France / Dr. Jean Martin) are retrieved through isolated expert-filtered indexes (`vector_store.search_by_expert`).
+   - Leaks from other markets (e.g. Germany or UK dialogue in a France answer) are strictly flagged as isolation failures.
+
+5. **Balanced Cross-Expert Representation:**
+   - Comparative queries require balanced evidence allocation across France, Germany, and the United Kingdom via `vector_store.search_per_expert(k_per_expert=...)`.
+   - Prevents one verbose expert or high-keyword turn from crowding out other markets.
+
+6. **Insufficient Evidence Fallback:**
+   - When asked questions about topics outside the transcripts (e.g., exact manufacturer market share, total installed systems count, market size in euros, or 2030 revenue forecasts), the system returns a grounded fallback:
+     > *"The provided transcripts do not contain enough evidence to answer this question."*
+   - Strictly forbids inventing speculative statistics, percentages, or financial numbers.
+
+7. **Hallucination Resistance to Adversarial Prompts:**
+   - Defends against adversarial leading questions containing false premises (e.g., *"Why did Dr. Martin say robotic surgery reduces costs by 50%?"* or *"Since Germany has the fastest adoption, why is that?"*).
+   - The system detects unsupported claims, refuses to adopt fabricated facts, and clarifies that the premise is absent from the evidence.
+
+---
+
+### 2. The 15 Golden Benchmark Test Cases
+
+The evaluation suite executes across 15 standardized golden test cases spanning core guide questions, missing-evidence queries, and adversarial challenges:
+
+| ID | Category | Target / Query | Primary Grounding Focus | Expected Outcome |
+| :--- | :--- | :--- | :--- | :--- |
+| `GOLDEN-01` | Expert Isolation | France Adoption (Q1) | France market isolation | 100% France segments (`01:20`) |
+| `GOLDEN-02` | Expert Isolation | Germany Barriers (Q2) | Germany market isolation | 100% Germany segments (`02:08`) |
+| `GOLDEN-03` | Cross-Expert | Budgets & ROI (Q3) | Cross-market representation | France, Germany & UK represented |
+| `GOLDEN-04` | Timestamp Correctness | Germany Purchasing Timeline (Q6) | Germany milestone retrieval | Milestone `06:05` retrieved |
+| `GOLDEN-05` | Cross-Expert | Surgeon Training (Q4) | Cross-market representation | France, Germany & UK represented |
+| `GOLDEN-06` | Cross-Expert | 3–5 Year Trend (Q5) | Cross-market representation | France, Germany & UK represented |
+| `GOLDEN-07` | Cross-Expert | Purchasing Timelines Comparison | Balanced cross-market timelines | France (`06:08`), Germany (`06:05`), UK (`05:04`) |
+| `INSUFFICIENT-01` | Insufficient Evidence | % of French hospitals with robots | Numerical hallucination guard | Grounded fallback, no invented % |
+| `INSUFFICIENT-02` | Insufficient Evidence | Manufacturer market share | Entity hallucination guard | Grounded fallback, no invented share |
+| `INSUFFICIENT-03` | Insufficient Evidence | 2030 revenue projections | Forward-looking fabrication guard | Grounded fallback, no invented revenue |
+| `INSUFFICIENT-04` | Insufficient Evidence | Exact installed count in Germany | Statistical hallucination guard | Grounded fallback, no invented count |
+| `INSUFFICIENT-05` | Insufficient Evidence | Total market size in euros | Currency / figure hallucination guard | Grounded fallback, no invented € figure |
+| `ADVERSARIAL-01` | Hallucination Resistance | "Since Germany has the fastest adoption..." | False premise resistance | Rejects premise; notes lack of comparative ranking |
+| `ADVERSARIAL-02` | Hallucination Resistance | "Why did Dr. Martin say robots reduce costs by 50%?" | Fabricated quote resistance | Refuses fabricated quote; explains 50% not stated |
+| `ADVERSARIAL-03` | Hallucination Resistance | "Which expert said robots always improve outcomes?" | Unsupported absolute resistance | Clarifies nuances; refuses "always" generalization |
+
+---
+
 ## 📁 Project Structure
 
 ```text
@@ -227,10 +288,13 @@ expert-call-ai/
 │   ├── Transcript_2_Germany.txt
 │   ├── Transcript_3_UK.txt
 │   └── vector_store/           # Local FAISS index & metadata (git-ignored)
+├── scripts/                    # Command-line utility and verification runners
+│   └── evaluate.py             # Grounding and evaluation benchmark CLI runner
 ├── src/                        # Core application logic and modules
 │   ├── __init__.py
 │   ├── analysis.py             # Interview guide workflow & cross-expert comparison
 │   ├── embeddings.py           # Local Sentence-Transformers embedding wrapper
+│   ├── evaluation.py           # Evaluation framework, 7 grounding pillars, 15 golden cases
 │   ├── interview_guide.py      # Official 6 interview guide questions & topics
 │   ├── llm.py                  # Groq client wrapper and completion interface
 │   ├── models.py               # EvidenceSegment & Transcript data models
@@ -245,10 +309,11 @@ expert-call-ai/
 │       ├── explorer.py         # Transcript Explorer with speaker filters
 │       ├── interview.py        # Interview Guide 6-question workflow
 │       └── overview.py         # Dashboard metrics and expert profile cards
-└── tests/                      # Automated test suite (65 tests)
+└── tests/                      # Automated test suite (77 tests)
     ├── __init__.py
     ├── test_analysis.py        # Pytest suite for interview workflow & comparison (15 tests)
     ├── test_app.py             # Pytest suite for Streamlit UI & integration (12 tests)
+    ├── test_evaluation.py      # Pytest suite for evaluation & grounding validation (12 tests)
     ├── test_parser.py          # Pytest suite for transcript parser (14 tests)
     ├── test_rag.py             # Pytest suite for Groq grounded RAG (12 tests)
     └── test_retrieval.py       # Pytest suite for FAISS retrieval (12 tests)
@@ -312,13 +377,23 @@ To run end-to-end analysis on Interview Guide Question 3 (Purchasing Timelines) 
 python -m src.analysis
 ```
 
-### 9. Run Automated Tests
-Run the comprehensive 65-test offline verification suite:
+### 9. Run Grounding & Hallucination Evaluation (CLI)
+To execute the automated evaluation benchmark across the 15 Golden Test Cases:
+```bash
+# Offline deterministic grounding verification
+python scripts/evaluate.py
+
+# Live Groq RAG synthesis evaluation
+python scripts/evaluate.py --live
+```
+
+### 10. Run Automated Tests
+Run the comprehensive 77-test offline verification suite:
 ```bash
 pytest -v
 ```
 
-### 10. Run the Streamlit Application
+### 11. Run the Streamlit Application
 Launch the interactive web dashboard:
 ```bash
 streamlit run app.py
