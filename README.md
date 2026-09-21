@@ -14,17 +14,19 @@
    - Structured parsing and segmenting of the 3 project expert-call transcripts with speaker and timestamp tracking.
 2. **Local Embedding & FAISS Semantic Retrieval:**
    - Offline, local dense vector retrieval preserving exact timestamps and metadata.
-3. **Interview-Guide Question Answering:**
+3. **Groq-Powered Grounded Answer Generation:**
+   - Strict evidence-grounded RAG synthesis with verbatim citations.
+4. **Interview-Guide Question Answering:**
    - Automated answering of 6 standard interview-guide questions for each expert transcript.
-4. **Traceability & Evidence Verification:**
+5. **Traceability & Evidence Verification:**
    - Extraction of exact verbatim quotes paired with source timestamps for every key insight and answer.
-5. **Cross-Expert Synthesis:**
+6. **Cross-Expert Synthesis:**
    - Identification of consensus themes, divergent opinions, and contrasting viewpoints across all 3 experts.
-6. **Interactive Cross-Transcript Q&A:**
+7. **Interactive Cross-Transcript Q&A:**
    - Natural language search and chat querying across all transcripts with source citations.
-7. **Anti-Hallucination Guardrails:**
+8. **Anti-Hallucination Guardrails:**
    - Strict retrieval-grounded synthesis ensuring assertions are traceable to transcript evidence.
-8. **Streamlit UI:**
+9. **Streamlit UI:**
    - User-friendly, clean dashboard to review individual expert insights, cross-expert comparisons, and run interactive queries.
 
 ---
@@ -90,9 +92,45 @@ FAISS stores dense numerical vectors; the aligned mapping maintains a direct 1:1
   - `index.faiss`: Serialized FAISS vector index binary.
   - `metadata.json`: Serialized evidence segment metadata list.
 - **Git Safety:** `data/vector_store/` and all `*.faiss`, `*.index`, and `*.pkl` files are ignored in `.gitignore` to keep the repository clean.
-- When existing artifacts are detected, `load_or_build_vector_store()` reloads the persisted index immediately without recomputing embeddings.
 
-> **Note on LLM Generation:** Groq (`GROQ_API_KEY`) is planned for a later step for synthesis and grounded LLM generation. In Step 3, only local embedding and FAISS vector retrieval are implemented. No LLM calls are made.
+---
+
+## 🧠 Groq-Powered Grounded Answer Generation (Step 4)
+
+### 1. End-to-End RAG Architecture
+```text
+User Question
+      ↓
+FAISS Vector Retrieval (src/vector_store.py)
+      ↓
+Retrieved EvidenceSegments (with timestamps & metadata)
+      ↓
+Context Construction (src/rag.py)
+      ↓
+Groq LLM Synthesis (src/llm.py)
+      ↓
+Structured RAGResponse (Answer + Verifiable Citations)
+```
+
+### 2. Separation of Retrieval, Generation, and Citations
+A core anti-hallucination principle of this application is strict separation of concerns:
+- **Retrieval:** FAISS identifies relevant factual evidence segments from the immutable transcript database.
+- **Generation:** Groq LLM synthesizes natural-language answers strictly constrained to the retrieved context.
+- **Citations & Quotations:** **The LLM is NOT permitted to invent or modify quotes.** All displayed source quotes and timestamps come directly from the underlying `EvidenceSegment.text` and `EvidenceSegment.timestamp` objects attached to `RAGResponse.sources`.
+
+### 3. Grounding & Anti-Hallucination System Prompt
+The Groq model is strictly governed by systemic guardrails:
+- Must answer **ONLY** from the supplied transcript context.
+- Forbidden from utilizing external pretrained world knowledge.
+- Must accurately attribute statements to the specific expert (France: Dr. Jean Martin, Germany: Anna Keller, UK: Dr. Emily Carter).
+- Never merges statements from different experts into a false consensus.
+- Explicitly highlights cross-market disagreements and divergences.
+- If evidence is missing or insufficient, states: *"The provided transcripts do not contain enough evidence to answer this question."*
+
+### 4. Groq Configuration
+- **Provider:** Groq API (`GROQ_API_KEY` loaded securely from `.env`).
+- **Model:** Configurable via `GROQ_MODEL` (default: `qwen/qwen3.8-27b`).
+- **Safety:** API credentials are never logged, exposed, or committed.
 
 ---
 
@@ -101,7 +139,7 @@ FAISS stores dense numerical vectors; the aligned mapping maintains a direct 1:1
 ```text
 expert-call-ai/
 ├── app.py                      # Streamlit entrypoint
-├── requirements.txt            # Project dependencies (Streamlit, FAISS, Sentence-Transformers)
+├── requirements.txt            # Project dependencies (Streamlit, FAISS, Groq, Sentence-Transformers)
 ├── README.md                   # Documentation & case study details
 ├── .gitignore                  # Git ignore rules (ignores .env, data/vector_store/)
 ├── .env.example                # Environment variable template (GROQ_API_KEY)
@@ -114,12 +152,15 @@ expert-call-ai/
 ├── src/                        # Core application logic and modules
 │   ├── __init__.py
 │   ├── embeddings.py           # Local Sentence-Transformers embedding wrapper
+│   ├── llm.py                  # Groq client wrapper and completion interface
 │   ├── models.py               # EvidenceSegment & Transcript data models
 │   ├── parser.py               # Deterministic transcript parser & CLI inspection
+│   ├── rag.py                  # Grounded RAG answer generation & manual CLI demo
 │   └── vector_store.py         # FAISS vector index, persistence, and retrieval CLI
 └── tests/                      # Automated test suite
     ├── __init__.py
     ├── test_parser.py          # Pytest suite for transcript parser (14 tests)
+    ├── test_rag.py             # Pytest suite for Groq grounded RAG (12 tests)
     └── test_retrieval.py       # Pytest suite for FAISS retrieval (12 tests)
 ```
 
@@ -154,7 +195,7 @@ pip install -r requirements.txt
 ### 4. Configure Environment Variables
 ```bash
 cp .env.example .env
-# Edit .env and supply your GROQ_API_KEY (used in later steps)
+# Edit .env and supply your GROQ_API_KEY
 ```
 
 ### 5. Inspect Parsed Transcripts (CLI)
@@ -169,12 +210,18 @@ To test semantic search over all 3 transcripts using FAISS:
 python -m src.vector_store
 ```
 
-### 7. Run Automated Tests
+### 7. Run Manual Groq RAG Verification (CLI)
+To test grounded question answering against the real Groq API:
+```bash
+python -m src.rag
+```
+
+### 8. Run Automated Tests
 ```bash
 pytest -v
 ```
 
-### 8. Run the Streamlit Application
+### 9. Run the Streamlit Application
 ```bash
 streamlit run app.py
 ```
