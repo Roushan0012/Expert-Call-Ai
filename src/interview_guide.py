@@ -32,32 +32,32 @@ INTERVIEW_GUIDE_TOPICS: List[InterviewGuideQuestion] = [
     InterviewGuideQuestion(
         id=1,
         question=INTERVIEW_GUIDE_QUESTIONS[0],
-        topic="Current Robotic Surgery Adoption",
+        topic="Current Adoption of Robotic Surgery",
     ),
     InterviewGuideQuestion(
         id=2,
         question=INTERVIEW_GUIDE_QUESTIONS[1],
-        topic="Barriers to Adoption",
+        topic="Main Barriers to Adoption",
     ),
     InterviewGuideQuestion(
         id=3,
         question=INTERVIEW_GUIDE_QUESTIONS[2],
-        topic="Hospital Budgets & ROI Importance",
+        topic="Hospital Budgets and ROI",
     ),
     InterviewGuideQuestion(
         id=4,
         question=INTERVIEW_GUIDE_QUESTIONS[3],
-        topic="Surgeon Training & Clinical Outcomes",
+        topic="Surgeon Training and Clinical Outcomes",
     ),
     InterviewGuideQuestion(
         id=5,
         question=INTERVIEW_GUIDE_QUESTIONS[4],
-        topic="3–5 Year Adoption Outlook",
+        topic="3–5 Year Adoption Trend",
     ),
     InterviewGuideQuestion(
         id=6,
         question=INTERVIEW_GUIDE_QUESTIONS[5],
-        topic="Hospital Purchasing Decision Timelines",
+        topic="Hospital Purchasing Decision Timeline",
     ),
 ]
 

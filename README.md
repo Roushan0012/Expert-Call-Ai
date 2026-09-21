@@ -136,14 +136,14 @@ The Groq model is strictly governed by systemic guardrails:
 
 ## 📊 Interview Guide Workflow & Cross-Expert Analysis (Step 5)
 
-### 1. The 6 Interview Guide Questions
+### 1. The 6 Official Interview Guide Questions
 The workflow standardizes analysis across all 3 case study transcripts (`src/interview_guide.py`):
-1. **Clinical Unmet Need:** What are the primary unmet clinical needs in surgical treatment and patient management?
-2. **Current Standard of Care:** What is the current standard of care and how do existing surgical tools perform?
-3. **Purchasing & Decision Timeline:** What is the hospital procurement and decision-making timeline for acquiring new medical equipment?
-4. **Key Stakeholders & Decision Makers:** Who are the primary stakeholders and decision-makers involved in purchasing evaluations?
-5. **Budget & Reimbursement:** What budget, pricing, or reimbursement constraints influence adoption in this market?
-6. **Adoption Barriers & Catalysts:** What are the primary barriers to adoption and what catalysts drive clinical acceptance?
+1. **Current Adoption of Robotic Surgery:** *How would you describe current adoption of robotic surgery in your market?*
+2. **Main Barriers to Adoption:** *What are the main barriers to adoption?*
+3. **Hospital Budgets & ROI:** *How important are hospital budgets and ROI in purchasing decisions?*
+4. **Surgeon Training & Clinical Outcomes:** *How important are surgeon training and clinical outcomes?*
+5. **3–5 Year Adoption Trend:** *What adoption trend do you expect over the next 3–5 years?*
+6. **Hospital Decision-Making Timeline:** *What is the typical hospital decision-making timeline for purchasing a new robotic system?*
 
 ### 2. Expert Isolation & Market Attribution
 - **Single-Expert Answers:** When querying an expert's perspective (`answer_expert_question()`), retrieval is strictly partitioned using `vector_store.search_by_expert(query, expert=..., k=...)`.

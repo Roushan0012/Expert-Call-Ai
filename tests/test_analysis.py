@@ -34,15 +34,27 @@ def vector_store() -> VectorStore:
     return load_or_build_vector_store()
 
 
-# 1. Exactly six interview-guide questions exist
+OFFICIAL_INTERVIEW_GUIDE_QUESTIONS = [
+    "How would you describe current adoption of robotic surgery in your market?",
+    "What are the main barriers to adoption?",
+    "How important are hospital budgets and ROI in purchasing decisions?",
+    "How important are surgeon training and clinical outcomes?",
+    "What adoption trend do you expect over the next 3–5 years?",
+    "What is the typical hospital decision-making timeline for purchasing a new robotic system?",
+]
+
+
+# 1. Exactly six official interview-guide questions exist in exact order
 def test_exactly_six_interview_questions_exist():
     questions = get_interview_guide_questions()
+    assert questions == OFFICIAL_INTERVIEW_GUIDE_QUESTIONS
+    assert INTERVIEW_GUIDE_QUESTIONS == OFFICIAL_INTERVIEW_GUIDE_QUESTIONS
     assert len(questions) == 6
-    assert len(INTERVIEW_GUIDE_QUESTIONS) == 6
+
     for i in range(1, 7):
         q = get_question_by_id(i)
         assert q.id == i
-        assert q.question
+        assert q.question == OFFICIAL_INTERVIEW_GUIDE_QUESTIONS[i - 1]
         assert q.topic
 
 
@@ -260,3 +272,34 @@ def test_analysis_serialization(vector_store: VectorStore):
     assert iq_dict["question_id"] == 1
     assert "France" in iq_dict["perspectives"]
     assert iq_dict["common_themes"] == ["Gradual adoption"]
+
+
+# 15. Cross-expert comparison specifically for Question 3 (Budgets & ROI)
+@patch("src.analysis.generate_answer")
+def test_question_3_hospital_budgets_and_roi_comparison(mock_gen, vector_store: VectorStore):
+    mock_gen.return_value = (
+        "COMMON THEMES:\n"
+        "- All three experts highlight that financial viability and procedure volume are critical for approval.\n"
+        "- Budgets are constrained across French, German, and UK hospital networks.\n\n"
+        "DIFFERENCES:\n"
+        "- In Germany (Anna Keller), procurement strictly demands total cost of ownership and DRG alignment.\n"
+        "- In the UK (Dr. Emily Carter), clinical strategy and patient outcomes balance purely financial ROI.\n\n"
+        "SYNTHESIS:\n"
+        "Hospital budgets and ROI are pivotal across all three markets, though evaluation frameworks differ."
+    )
+    q3_text = OFFICIAL_INTERVIEW_GUIDE_QUESTIONS[2]
+    res = analyze_interview_question(q3_text, top_k_per_expert=2, vector_store=vector_store)
+
+    assert res.question == q3_text
+    assert res.topic == "Hospital Budgets and ROI"
+    assert len(res.perspectives) == 3
+    for country in ["France", "Germany", "United Kingdom"]:
+        assert country in res.perspectives
+        p = res.perspectives[country]
+        assert len(p.sources) > 0
+        for s in p.sources:
+            assert s.country == country
+
+    assert len(res.common_themes) >= 2
+    assert len(res.differences) >= 2
+    assert "Hospital budgets and ROI" in res.synthesis

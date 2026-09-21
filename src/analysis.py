@@ -233,7 +233,7 @@ def _resolve_expert_evidence(
         sub_results = store.search_by_expert(
             query=q_text,
             expert_or_country=target,
-            k=max(top_k * 2, 4),
+            k=max(top_k * 2, 6),
             filter_expert_only=False,
         )
         raw_candidates.extend(sub_results)
@@ -242,32 +242,40 @@ def _resolve_expert_evidence(
     raw_candidates.sort(key=lambda r: r.score, reverse=True)
 
     all_segs = store.segments
-    chosen: List[EvidenceSegment] = []
+    expert_segs: List[EvidenceSegment] = []
+    other_segs: List[EvidenceSegment] = []
     seen = set()
 
     for r in raw_candidates:
         seg = r.segment
-        if seg.segment_id not in seen:
-            seen.add(seg.segment_id)
-            chosen.append(seg)
-
-        # If interviewer question retrieved, include the subsequent expert answer
-        if not seg.is_expert:
+        if seg.is_expert:
+            if seg.segment_id not in seen:
+                seen.add(seg.segment_id)
+                expert_segs.append(seg)
+        else:
+            # If interviewer question retrieved, include the subsequent expert answer immediately
             for idx, s in enumerate(all_segs):
                 if s.segment_id == seg.segment_id and idx + 1 < len(all_segs):
                     next_s = all_segs[idx + 1]
                     if next_s.is_expert and next_s.transcript_id == seg.transcript_id:
                         if next_s.segment_id not in seen:
                             seen.add(next_s.segment_id)
-                            chosen.append(next_s)
+                            expert_segs.append(next_s)
                     break
+            if seg.segment_id not in seen:
+                seen.add(seg.segment_id)
+                other_segs.append(seg)
 
-        if len(chosen) >= top_k:
+        if len(expert_segs) >= top_k:
             break
 
     # Prioritize expert statements in sources
-    chosen.sort(key=lambda s: (not s.is_expert, s.timestamp))
-    return chosen[:top_k]
+    final_chosen = expert_segs[:top_k]
+    if len(final_chosen) < top_k:
+        final_chosen.extend(other_segs[: (top_k - len(final_chosen))])
+
+    final_chosen.sort(key=lambda s: s.timestamp)
+    return final_chosen
 
 
 def answer_expert_question(
@@ -503,48 +511,55 @@ def _manual_cli_demo() -> None:
 
     store = load_or_build_vector_store()
 
-    # Part A: One interview guide question for all 3 experts
-    demo_q = INTERVIEW_GUIDE_QUESTIONS[2]  # Hospital budgets and ROI
-    print(f"\n{'#' * 80}")
-    print(f"PART A: INTERVIEW QUESTION ACROSS ALL 3 EXPERTS")
-    print(f"Question: \"{demo_q}\"")
-    print(f"{'#' * 80}")
+    # Part 1: All 6 Official Interview Guide Questions across all 3 experts
+    for idx, q_text in enumerate(INTERVIEW_GUIDE_QUESTIONS, start=1):
+        print(f"\n{'#' * 80}")
+        print(f"OFFICIAL QUESTION {idx}: \"{q_text}\"")
+        print(f"{'#' * 80}")
 
-    for country in ["France", "Germany", "United Kingdom"]:
-        perspective = answer_expert_question(demo_q, country, top_k=2, vector_store=store)
-        print(f"\n--- {perspective.country.upper()}: {perspective.expert} ({perspective.role}) ---")
-        print(f"Answer: {perspective.answer}")
-        print("Sources:")
-        for s in perspective.sources:
-            print(f"  [{s.timestamp}] \"{s.text}\"")
+        for country in ["France", "Germany", "United Kingdom"]:
+            persp = answer_expert_question(q_text, country, top_k=2, vector_store=store)
+            print(f"\n--- [{persp.country.upper()}] {persp.expert} ({persp.role}) ---")
+            print(f"Answer: {persp.answer}")
+            print("Sources:")
+            for s in persp.sources:
+                print(f"  • [{s.timestamp}] \"{s.text}\"")
 
-    # Part B & C: Purchasing timeline cross-expert comparison
-    timeline_q = INTERVIEW_GUIDE_QUESTIONS[5]  # Purchasing decision timeline
-    print(f"\n{'#' * 80}")
-    print(f"PART B & C: PURCHASING TIMELINES CROSS-EXPERT COMPARISON")
-    print(f"Question: \"{timeline_q}\"")
-    print(f"{'#' * 80}")
-
-    timeline_res = analyze_interview_question(timeline_q, top_k_per_expert=2, vector_store=store)
-
-    print("\n--- INDIVIDUAL PERSPECTIVES ---")
-    for country, p in timeline_res.perspectives.items():
-        print(f"\n[{country}] {p.expert}:")
-        print(f"Answer : {p.answer}")
-        print("Sources:")
-        for s in p.sources:
-            print(f"  [{s.timestamp}] \"{s.text}\"")
+    # Part 2: Cross-Expert Comparison for Question 3 (Budgets & ROI)
+    q3 = INTERVIEW_GUIDE_QUESTIONS[2]
+    print(f"\n{'=' * 80}")
+    print(f"CROSS-EXPERT COMPARISON — QUESTION 3: \"{q3}\"")
+    print(f"{'=' * 80}")
+    comparison_q3 = compare_experts(q3, top_k_per_expert=2, vector_store=store)
 
     print("\n--- COMMON THEMES ---")
-    for t in timeline_res.common_themes:
+    for t in comparison_q3.common_themes:
         print(f"• {t}")
 
     print("\n--- DIFFERENCES & DIVERGENCES ---")
-    for d in timeline_res.differences:
+    for d in comparison_q3.differences:
         print(f"• {d}")
 
     print("\n--- SYNTHESIS ---")
-    print(timeline_res.synthesis)
+    print(comparison_q3.analysis)
+
+    # Part 3: Cross-Expert Comparison for Question 6 (Purchasing Timelines)
+    q6 = INTERVIEW_GUIDE_QUESTIONS[5]
+    print(f"\n{'=' * 80}")
+    print(f"CROSS-EXPERT COMPARISON — QUESTION 6: \"{q6}\"")
+    print(f"{'=' * 80}")
+    comparison_q6 = compare_experts(q6, top_k_per_expert=2, vector_store=store)
+
+    print("\n--- COMMON THEMES ---")
+    for t in comparison_q6.common_themes:
+        print(f"• {t}")
+
+    print("\n--- DIFFERENCES & DIVERGENCES ---")
+    for d in comparison_q6.differences:
+        print(f"• {d}")
+
+    print("\n--- SYNTHESIS ---")
+    print(comparison_q6.analysis)
 
     print("\n" + "=" * 80)
     print("Step 5 Manual CLI verification completed successfully.")
