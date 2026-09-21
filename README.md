@@ -12,17 +12,19 @@
 
 1. **Transcript Ingestion & Parsing:**
    - Structured parsing and segmenting of the 3 project expert-call transcripts with speaker and timestamp tracking.
-2. **Interview-Guide Question Answering:**
+2. **Local Embedding & FAISS Semantic Retrieval:**
+   - Offline, local dense vector retrieval preserving exact timestamps and metadata.
+3. **Interview-Guide Question Answering:**
    - Automated answering of 6 standard interview-guide questions for each expert transcript.
-3. **Traceability & Evidence Verification:**
+4. **Traceability & Evidence Verification:**
    - Extraction of exact verbatim quotes paired with source timestamps for every key insight and answer.
-4. **Cross-Expert Synthesis:**
+5. **Cross-Expert Synthesis:**
    - Identification of consensus themes, divergent opinions, and contrasting viewpoints across all 3 experts.
-5. **Interactive Cross-Transcript Q&A:**
+6. **Interactive Cross-Transcript Q&A:**
    - Natural language search and chat querying across all transcripts with source citations.
-6. **Anti-Hallucination Guardrails:**
+7. **Anti-Hallucination Guardrails:**
    - Strict retrieval-grounded synthesis ensuring assertions are traceable to transcript evidence.
-7. **Streamlit UI:**
+8. **Streamlit UI:**
    - User-friendly, clean dashboard to review individual expert insights, cross-expert comparisons, and run interactive queries.
 
 ---
@@ -48,10 +50,49 @@ Transcripts are deterministically parsed into strongly typed `EvidenceSegment` u
 ### 3. Exact Quote & Timestamp Preservation
 Every dialogue turn is extracted directly from the raw transcript. Punctuation, capitalization, terminology, and timestamps are preserved with 100% fidelity. No text is normalized, summarized, or rephrased during parsing.
 
-### 4. Importance of Deterministic Parsing for Traceability
-In high-stakes technical and clinical analyses, AI systems must never hallucinate evidence. Deterministic, rule-based parsing creates immutable evidence records linked to exact timestamps. When downstream systems surface a quote or assertion, it directly maps back to a verifiable line in the original transcript.
+---
 
-> **Note on LLM Integration:** Groq (`GROQ_API_KEY`) is selected as the LLM provider for downstream retrieval-augmented generation (RAG) and question answering. In this step, only deterministic ingestion and parsing are implemented; no external LLM API calls or vector embeddings are performed.
+## 🔍 Semantic Retrieval Layer with FAISS (Step 3)
+
+### 1. Architecture Flow
+```text
+Transcript Files (.txt)
+         ↓
+Deterministic Parser (src/parser.py)
+         ↓
+Structured EvidenceSegments (42 total segments)
+         ↓
+Local HuggingFace Embeddings (all-MiniLM-L6-v2)
+         ↓
+FAISS Vector Index (IndexFlatIP + L2 Normalization)
+         ↓
+Semantic Similarity Search (Cosine Similarity)
+         ↓
+Relevant EvidenceSegment with Timestamps & Metadata
+```
+
+### 2. Local HuggingFace Embedding Model
+- **Model:** `sentence-transformers/all-MiniLM-L6-v2` (384-dimensional dense vectors).
+- **Execution:** Runs 100% locally and offline without sending any transcript text to third-party embedding APIs.
+- **Model Caching:** Embeddings model is cached in-process via `get_embedding_model()` to avoid reloading model weights per query.
+
+### 3. FAISS Similarity Metric (Cosine Similarity)
+- **Index Type:** `faiss.IndexFlatIP` (Inner Product).
+- **Mathematical Equivalence:** Because all segment and query vectors are L2-normalized ($\|u\|_2 = \|v\|_2 = 1$), the inner product is mathematically identical to Cosine Similarity:
+  $$\text{Cosine Similarity}(u, v) = \frac{u \cdot v}{\|u\|_2 \|v\|_2} = u \cdot v$$
+- Similarity scores range from `-1.0` to `1.0` (where `1.0` represents identical semantic direction).
+
+### 4. Metadata Mapping & Traceability
+FAISS stores dense numerical vectors; the aligned mapping maintains a direct 1:1 positional index back to the underlying `EvidenceSegment`. When a vector is retrieved, its full context (`transcript_id`, `expert`, `country`, `role`, `timestamp`, `speaker`, `exact text`) is immediately recovered without loss of information.
+
+### 5. Persistence Strategy
+- Vector store artifacts are saved locally to `data/vector_store/`:
+  - `index.faiss`: Serialized FAISS vector index binary.
+  - `metadata.json`: Serialized evidence segment metadata list.
+- **Git Safety:** `data/vector_store/` and all `*.faiss`, `*.index`, and `*.pkl` files are ignored in `.gitignore` to keep the repository clean.
+- When existing artifacts are detected, `load_or_build_vector_store()` reloads the persisted index immediately without recomputing embeddings.
+
+> **Note on LLM Generation:** Groq (`GROQ_API_KEY`) is planned for a later step for synthesis and grounded LLM generation. In Step 3, only local embedding and FAISS vector retrieval are implemented. No LLM calls are made.
 
 ---
 
@@ -60,22 +101,26 @@ In high-stakes technical and clinical analyses, AI systems must never hallucinat
 ```text
 expert-call-ai/
 ├── app.py                      # Streamlit entrypoint
-├── requirements.txt            # Project dependencies
+├── requirements.txt            # Project dependencies (Streamlit, FAISS, Sentence-Transformers)
 ├── README.md                   # Documentation & case study details
-├── .gitignore                  # Git ignore rules
+├── .gitignore                  # Git ignore rules (ignores .env, data/vector_store/)
 ├── .env.example                # Environment variable template (GROQ_API_KEY)
 ├── data/                       # Case study transcript files
 │   ├── .gitkeep
 │   ├── Transcript_1_France.txt
 │   ├── Transcript_2_Germany.txt
-│   └── Transcript_3_UK.txt
+│   ├── Transcript_3_UK.txt
+│   └── vector_store/           # Local FAISS index & metadata (git-ignored)
 ├── src/                        # Core application logic and modules
 │   ├── __init__.py
+│   ├── embeddings.py           # Local Sentence-Transformers embedding wrapper
 │   ├── models.py               # EvidenceSegment & Transcript data models
-│   └── parser.py               # Deterministic transcript parser & CLI inspection
+│   ├── parser.py               # Deterministic transcript parser & CLI inspection
+│   └── vector_store.py         # FAISS vector index, persistence, and retrieval CLI
 └── tests/                      # Automated test suite
     ├── __init__.py
-    └── test_parser.py          # Pytest suite for transcript parser
+    ├── test_parser.py          # Pytest suite for transcript parser (14 tests)
+    └── test_retrieval.py       # Pytest suite for FAISS retrieval (12 tests)
 ```
 
 ---
@@ -113,17 +158,23 @@ cp .env.example .env
 ```
 
 ### 5. Inspect Parsed Transcripts (CLI)
-To run the built-in parser inspection tool and verify parsed evidence segments:
+To run the built-in parser inspection tool:
 ```bash
 python -m src.parser
 ```
 
-### 6. Run Automated Tests
+### 6. Verify Semantic Retrieval (CLI)
+To test semantic search over all 3 transcripts using FAISS:
+```bash
+python -m src.vector_store
+```
+
+### 7. Run Automated Tests
 ```bash
 pytest -v
 ```
 
-### 7. Run the Streamlit Application
+### 8. Run the Streamlit Application
 ```bash
 streamlit run app.py
 ```

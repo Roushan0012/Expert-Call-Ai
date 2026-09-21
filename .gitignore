@@ -26,6 +26,8 @@ Thumbs.db
 chroma_db/
 vector_store/
 vectorstore/
+data/vector_store/
+artifacts/
 .faiss/
 
 # Testing & coverage
