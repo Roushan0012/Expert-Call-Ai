@@ -6,10 +6,14 @@ and security guardrails (no API keys exposed).
 """
 
 import os
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 import pytest
 
 from streamlit.testing.v1 import AppTest
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+APP_PATH = PROJECT_ROOT / "app.py"
 
 from src.interview_guide import (
     INTERVIEW_GUIDE_QUESTIONS,
@@ -135,7 +139,7 @@ def test_no_api_key_exposed():
 
 # 9. AppTest simulation loads the Overview page
 def test_apptest_overview_loads():
-    at = AppTest.from_file("app.py", default_timeout=15)
+    at = AppTest.from_file(APP_PATH, default_timeout=15)
     at.run()
     assert not at.exception
     # Check title is present
@@ -145,7 +149,7 @@ def test_apptest_overview_loads():
 
 # 10. AppTest simulation can navigate to Interview Guide page
 def test_apptest_navigation_to_interview_guide():
-    at = AppTest.from_file("app.py", default_timeout=15)
+    at = AppTest.from_file(APP_PATH, default_timeout=15)
     at.run()
     if at.sidebar.radio:
         at.sidebar.radio[0].set_value("Interview Guide").run()
@@ -156,7 +160,7 @@ def test_apptest_navigation_to_interview_guide():
 
 # 11. AppTest simulation can navigate to Cross-Expert Analysis page
 def test_apptest_navigation_to_cross_expert():
-    at = AppTest.from_file("app.py", default_timeout=15)
+    at = AppTest.from_file(APP_PATH, default_timeout=15)
     at.run()
     if at.sidebar.radio:
         at.sidebar.radio[0].set_value("Cross-Expert Analysis").run()
@@ -167,10 +171,11 @@ def test_apptest_navigation_to_cross_expert():
 
 # 12. AppTest simulation can navigate to Transcript Explorer page
 def test_apptest_navigation_to_transcript_explorer():
-    at = AppTest.from_file("app.py", default_timeout=15)
+    at = AppTest.from_file(APP_PATH, default_timeout=15)
     at.run()
     if at.sidebar.radio:
         at.sidebar.radio[0].set_value("Transcript Explorer").run()
         assert not at.exception
         titles = [t.value for t in at.title]
         assert any("Transcript Explorer" in t for t in titles)
+
